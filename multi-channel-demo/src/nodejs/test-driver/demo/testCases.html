@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+		<title>Test Cases</title>
+   
+		<script src="../bower_components/jquery/dist/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+		<script src="../bower_components/angular/angular.js"></script>
+		<script src="../bower_components/split-pane/split-pane.js"></script>
+		<script src="angular-split-pane.js"></script>
+        <script src="resend.js"></script>
+        <script src="sp_api.js"></script>
+        <script src="//ajaxorg.github.io/ace-builds/src-min-noconflict/ace.js" type="text/javascript" charset="utf-8"></script>
+        
+        <link rel="stylesheet" type="text/css" href="style.css">
+		<link rel="stylesheet" href="../bower_components/split-pane/split-pane.css" />
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" />
+        
+		<style type="text/css">
+			html, body {
+				height: 100%;
+				min-height: 100%;
+				margin: 0;
+				padding: 0;
+			}
+			/* The styling bolow is very simple. You can style things your own way. */
+			body {
+				box-sizing: border-box;
+				background: #aaa;
+				padding: 5px;
+			}
+			.split-pane-divider {
+				background: #aaa;
+			}
+			.split-pane-component {
+				background: #fff;
+			}
+		</style>
+	</head>
+	<body data-ng-app="example">
+		<div data-split-pane>
+            
+			<div class="testCasePane" data-split-pane-component data-width="20em">
+                <!-- Left Pane Collapsable Lists -->
+                <div data-role="collapsible">
+                    <h4>Tools</h4>
+                    <ul data-role="listview">
+                      <li><a  target="_blank" href="http://webhook.yepher.com:3000/?hookId=demoEndpoint">HTTP Endpoint Viewer</a></li>
+                    </ul>
+                </div>
+                
+                <div data-role="collapsible">
+                    <h4>Multi-Channel Tests</h4>
+                    <ul id="testCases" data-role="listview">
+                      <li><a href="#multi-channel-smtp" onclick="MyFunction('multi-channel-smtp');return false;">SMTP</a></li>
+                      <li><a href="multi-channel-smpp"   onclick="MyFunction('multi-channel-smpp');return false;">SMPP</a></li>
+                      <li><a href="#multi-channel-http"  onclick="MyFunction('multi-channel-http');return false;">HTTP</a></li>
+                    </ul>
+                </div>
+
+                <div data-role="collapsible">
+                <h4>Policy Tests</h4>
+                    <ul data-role="listview">
+                       <li><a href="#policy-blacklist" onclick="MyFunction('policy-blacklist');return false;">Recipient Blacklist</a></li>
+                       <li><a href="#policy-per-user-quiet-time" onclick="MyFunction('policy-per-user-quiet-time');return false;">Quiet Time</a></li>
+                        <li><a href="#policy-per-user-quiet-time" onclick="MyFunction('policy-per-user-quiet-time');return false;">Quiet Time Per User</a></li>
+                    </ul>
+                </div>
+
+                <div data-role="collapsible">
+                <h4>Message Routing Tests</h4>
+                    <ul data-role="listview">
+                      <li><a href="#route-per-user-timebased" onclick="MyFunction('route-per-user-timebased');return false;">Time Based Routing</a></li>
+                      <li><a href="#route-per-user-timebased" onclick="MyFunction('route-per-user-timebased');return false;">Per-User Time Based Routing</a></li>
+                      <li><a href="#route-resend-message" onclick="MyFunction('route-resend-message');return false;">Resend Message</a></li>
+                    </ul>
+                </div>
+            
+            </div>
+            
+			<!-- Splitview Divider -->
+            <div data-split-pane-divider data-width="5px"></div>
+            
+            <!-- Right Data Pane -->
+			<div data-split-pane-component >
+                <!-- Right Pane Content -->
+                <div id="target_div">Loading....</div>
+            </div>
+		
+        </div>
+		<script>
+			angular.module('example', ['shagstrom.angular-split-pane']);
+		</script>
+        <script>
+            
+            function MyFunction(refElement) {
+                var target = $('#target_div');
+                target.load(refElement + ".html");
+                
+            }
+            
+            $( document ).ready(function() {
+                MyFunction('multi-channel-smtp');
+            });
+            
+
+        </script>
+	</body>
+</html>

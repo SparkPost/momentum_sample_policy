@@ -1,0 +1,23 @@
+{
+    "substitution_data": {
+       
+    },
+    "recipients": [
+        {
+            "address": {
+                "email": "test@http-gateway.local"
+            },
+            "substitution_data": {
+                "subject": "Delivered to HTTP endpoint"
+            }
+        }
+    ],
+    "return_path":"from@example.com",
+    "content": {
+        "from": "from@example.com",
+        "html": "<body> <p>This content is delivered to an HTTP endpoint</p></body>",
+        "text": "This content is delivered to an HTTP endpoint",
+        "subject": "{{subject}}"
+    }
+}
+

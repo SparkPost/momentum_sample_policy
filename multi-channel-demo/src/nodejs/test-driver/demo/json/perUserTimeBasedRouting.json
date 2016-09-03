@@ -1,0 +1,24 @@
+{
+    "recipients": [
+        {
+            "address": {
+                "email": "test@yepher.com"
+            },
+            "substitution_data": {
+                "subject": "This should be SMS only"
+            },
+            "tags": [],
+            "metadata": {
+                "userId": "100",
+                "ignore_timeOverride": "1"
+            }
+        }
+    ],
+    "return_path":"from@example.com",
+    "content": {
+        "from": "from@example.com",
+        "html": "<body> <p>This should be SMS</p></body>",
+        "text": "This should be SMS",
+        "subject": "{{subject}}"
+    }
+}

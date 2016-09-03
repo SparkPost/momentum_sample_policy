@@ -1,0 +1,17 @@
+<script>
+$(document).ready(function(){
+    $("button").click(function(){
+        sendToServer("smtp", "/api/v1/transmissions", $( "#jsonText" ).val() );
+    });
+});
+</script>
+
+<div>
+<b>This is multi-channel SMTP HTML page...</b>
+<br>
+<textarea rows="40" cols="100" class="textbox" id="jsonText"></textarea>
+<br>
+<button>Send</button>
+
+<script> $( "#jsonText" ).load( "json/smtpTest.json" ); </script>
+</div>

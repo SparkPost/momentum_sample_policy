@@ -1,0 +1,16 @@
+{
+    "recipients": [
+        {
+            "address": {
+                "email": "blockme@sparkpost.com"
+            }
+        }
+    ],
+    "return_path":"from@example.com",
+    "content": {
+        "from": "from@example.com",
+        "html": "<body> <p>My HTML Content</p> </body>",
+        "text": "Your text content",
+        "subject": "BLOCKED: my subject"
+    }
+}

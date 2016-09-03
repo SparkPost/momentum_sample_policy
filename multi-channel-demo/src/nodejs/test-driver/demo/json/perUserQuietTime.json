@@ -1,0 +1,24 @@
+{
+    "recipients": [
+        {
+            "address": {
+                "email": "test@yepher.com"
+            },
+            "substitution_data": {
+                "subject": "Is Quiet Time"
+            },
+            "tags": [],
+            "metadata": {
+                "userId": "1",
+                "timeOverride": "1"
+            }
+        }
+    ],
+    "return_path":"from@example.com",
+    "content": {
+        "from": "from@example.com",
+        "html": "<body> <p>Some HTML Content</p></body>",
+        "text": "Some Text Content",
+        "subject": "{{subject}}"
+    }
+}

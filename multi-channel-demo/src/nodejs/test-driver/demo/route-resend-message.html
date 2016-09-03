@@ -1,0 +1,101 @@
+<div class="testcase">
+<center><b>This is route-resend-message HTML page...</b></center>
+<br><br>
+
+<div style="height:95%;overflow:auto;width:95%;" class="requestTable" id="requests">
+    <button id="ClearTable">Clear Table</button>
+    <table id="requestItems">
+        <tr>
+            <th>Time</th>
+            <th>Source</th>
+            <th>Result</th>
+            <th>TX</th>
+            <th>RX</th>
+            <th>Info</th>
+        </tr>
+    </table>
+</div>
+
+<script>
+    $(document).ready(function(){
+        document.body.addEventListener("rowAdded", rowAdded, false);
+        
+        $("#ClearTable").click(function(){
+            console.log("Clear Clicked");
+            clearStore();
+            
+            var table = $('#requestItems');
+            var Parent = document.getElementById("requestItems");
+            while(Parent.hasChildNodes()) {
+               Parent.removeChild(Parent.firstChild);
+            }
+        });
+
+        loadTable();
+    });
+    
+    function loadTable() {
+        // Populate Existing Rows
+        for (var key in localStorage){
+           if (key.startsWith("tx_")) {
+               addRowWithKey(key);
+           }
+        }
+    }
+    
+    function confirmResend(key) {
+        if (confirm("Are you sure you want to resend message?") == true) {
+            console.log("Will send: " + key)
+            resendKey(key);
+        }
+    }
+    
+    function onRequestClicked(row) {
+        console.log("Clicked: " + row.id);
+        confirmResend(row.id);
+    }
+    
+    function rowAdded(e) {
+        var key = e.detail['keyName'];
+        
+        // Make sure row does not already exist in table
+        if($('#' + key).length) {
+            return;
+        }
+        console.log("rowAdded " + e.detail['keyName']);
+        addRowWithKey(key);
+    }
+    
+    function addRowWithKey(key) {
+        var row = $('<tr onclick="onRequestClicked(this)" class="requestrow"  id="' + key + '" />', {}).appendTo("#requestItems");
+        var payload = localStorage[key];
+        //console.log("Payload Type: " + typeof payload + ", " + JSON.stringify(payload) );
+        var jsonObject = JSON.parse(payload);
+
+        $('<td />', {
+            'text': new Date(jsonObject['timestamp']).toLocaleTimeString()
+        }).appendTo(row);
+
+        $('<td />', {
+            'text': jsonObject['source']
+        }).appendTo(row);
+
+        $('<td />', {
+            'text': jsonObject['result']
+        }).appendTo(row);
+
+        $('<td />', {
+            'text': jsonObject['sent']
+        }).appendTo(row);
+
+        $('<td />', {
+            'text': jsonObject['response']
+        }).appendTo(row);
+
+        $('<td />', {
+            'text': jsonObject['errorText']
+        }).appendTo(row);
+    }
+</script>
+    
+</div>

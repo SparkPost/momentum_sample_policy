@@ -1,0 +1,23 @@
+{
+    "substitution_data": {
+        
+    },
+    "recipients": [
+        {
+            "address": {
+                "email": "test@yepher.com"
+            },
+            "substitution_data": {
+                "subject": "Simple transmission"
+            }
+        }
+    ],
+    "return_path":"from@example.com",
+    "content": {
+        "from": "from@example.com",
+        "html": "<body> <p>Simple transmission</p> </body>",
+        "text": "Simple transmission",
+        "subject": "{{subject}}"
+    }
+}
+

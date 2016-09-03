@@ -1,0 +1,22 @@
+{
+    "substitution_data": {
+        
+    },
+    "recipients": [
+        {
+            "address": {
+                "email": "TELEPHONE_NUMBER@uso.sms.int"
+            },
+            "substitution_data": {
+                "subject": "mysubject"
+            }
+        }
+    ],
+    "return_path":"from@example.com",
+    "content": {
+        "from": "from@example.com",
+        "html": "<body> <p>Test outbound SMSM</p></body>",
+        "text": "Test outbound SMS",
+        "subject": "{{subject}}"
+    }
+}

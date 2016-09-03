@@ -1,0 +1,41 @@
+<script>
+$(document).ready(function(){
+    $("button").click(function(){
+        var editor = ace.edit("editor");
+        sendToServer("smpp", "/api/v1/transmissions", editor.getValue());
+    });
+});
+</script>
+
+<div class="testcase">
+<center><b>This is multi-channel SMS HTML page...</b></center>
+<br><br>
+<div id="editor" id="jsonText">Loading...</div>
+<br>    
+<button>Send</button>
+
+<script>
+    var editor = ace.edit("editor");
+    editor.$blockScrolling = Infinity;
+    editor.setTheme("ace/theme/github");
+    editor.getSession().setMode("ace/mode/json");
+</script>
+<script> 
+    var callback = function (data, status, xhr) {
+        if (status == 'success') {
+            var editor = ace.edit("editor");
+            editor.setValue(data);
+             editor.session.selection.clearSelection();
+
+        }
+    };
+    $.ajax(
+        {
+            url : 'json/smppTest.json',
+            dataType : 'text',
+            success : callback
+        }
+    );
+    
+</script>
+</div>
