@@ -13,4 +13,10 @@ function mod:validate_set_binding(msg)
 end
 
 
+function mod:outbound_smtp_auth_config(msg, ac, vctx)
+   debug.output('You should set the binding if using SparkPost Elite');
+   -- msg:header('X-Binding', 'test')
+end
+
+
 msys.registerModule("spe-relay", mod);
