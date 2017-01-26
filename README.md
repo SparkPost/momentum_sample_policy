@@ -6,6 +6,7 @@ This is a place to put sample policy that demonstrates commonly asked questions 
 
 | Name  | Description  |
 |:-:|---|
-| kitchen-sink | A collection of common policy tasks |
-| multi-channel-demo  | Various policy to route messages to HTTP, SMPP and SMTP  |
-| sparkpost-relay  | Demonstrates how to relay message through another authenticated SMTP server [see](https://support.messagesystems.com/docs/web-momo4/modules.outbound_smtp_auth.php) |
+| `kitchen-sink` | A collection of common policy tasks |
+| `multi-channel-demo`  | Various policy to route messages to HTTP, SMPP and SMTP  |
+| `sparkpost-relay`  | Demonstrates how to relay message through another authenticated SMTP server [see](https://support.messagesystems.com/docs/web-momo4/modules.outbound_smtp_auth.php) |
+| `training-policy` | Migrated policy from `github.com/SparkPost/lua-policies` |
