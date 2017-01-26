@@ -8,21 +8,32 @@ This is a collection of LUA examples that demonstrates commonly asked coding que
 
 To track the execution of your LUA script, in a manner analogous to C's `__LINE__` symbol.   The following can be inserted temporarily for debugging purposes pretty much anywhere, and then you can look for the output in Momentum's panic log.
 
-``` print ("Reached Line #" .. debug.getinfo(1,'l').currentline) ```
+`print ("Reached Line #" .. debug.getinfo(1,'l').currentline)`
 
 ### Replacing the Received header (to remove "ecelerity", or internal IPs, etc)
 
 Requires there to be only one Received header in place. More info on matching [regex](http://www.lua.org/pil/20.3.html).
 
-``` local myReceived = msg:header("Received");
+```
+local myReceived = msg:header("Received");
 local hostname = "New Hostname";
-local address = "192.168.1.1"; --new IP address
+local address = "192.168.1.1";
+
+--new IP address
 local mtasoftware = "Name of MTA software";
-local mytempReceived = string.gsub(myReceived[1],"127.0.0.1",address); --old ip address
-local mytmpReceived = string.gsub(mytempReceived,"old[\-]hostname.smtp.com",hostname); --this old hostname matches against a regex
-local mynewReceived = string.gsub(mytmpReceived,"[\(]ecelerity %d+.%d+.%d+.%d+ r[\(]%d+[\)][\)]", mtasoftware); --you can delete the mtasoftware variable above and replace mtasoftware in this line with double quotes to remove it entirely.
-msg:header("Received",mynewReceived); --this inserts the new header line onto the bottom of the message header
-local myReceived = msg:header("Received"); 
+local mytempReceived = string.gsub(myReceived[1],"127.0.0.1",address); 
+
+--old ip address
+local mytmpReceived = string.gsub(mytempReceived,"old[\-]hostname.smtp.com",hostname); 
+
+--this old hostname matches against a regex
+local mynewReceived = string.gsub(mytmpReceived,"[\(]ecelerity %d+.%d+.%d+.%d+ r[\(]%d+[\)][\)]", mtasoftware); 
+
+--you can delete the mtasoftware variable above and replace mtasoftware in this line with double quotes to remove it entirely.
+msg:header("Received",mynewReceived); 
+
+--this inserts the new header line onto the bottom of the message header
+local myReceived = msg:header("Received");
 ```
 
 ### IP Address that Message is From
@@ -44,17 +55,19 @@ print ("IP 2:"..ip1[1]);
 Check To: domain (in this case, gmail), just set list-unsubscribe (or any other header can be used) to nil.
 
 ```
-local hdrTo = msg:header( "To" )[1];local i1;
+local hdrTo = msg:header( "To" )[1];
+local i1;
+
 i1 = string.find(hdrTo, "@gmail.com");
   
 if i1 == nil then
-msg:header("List-Unsubscribe","");
+   msg:header("List-Unsubscribe","");
 end
 ```
 
 ## Policy Samples
 
-The following table briefly describe the examples found in `src` directory.
+The following table briefly describes the examples found in `src` directory.
 
 | Name | Description  |
 |---|---|
