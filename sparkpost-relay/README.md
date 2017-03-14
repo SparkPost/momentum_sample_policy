@@ -58,11 +58,11 @@ msys.provides:auto = config.Global:Domain.Outbound_SMTP_Auth_User
 
 ## Visualizing Relay Messages
 
-In some cases you would like to debug relayed messages on your local machine with out going through the foreign SMTP server. His is one way to accomplish that:
+In some cases you would like to debug relayed messages on your local machine with out going through the foreign SMTP server. This is one way to accomplish that:
 
 1. Get [fake SMTP server](https://nilhcem.github.io/FakeSMTP/)
 2. Run server locally on port 2525 like this `java -jar fakeSMTP-2.0.jar -s -p 2525`
-3. Reverse tunnel Momentum machine to local machine like this `ssh -R 2525:localhost:2525 root@talktalk1`
+3. Reverse tunnel Momentum machine to local machine like this `ssh -R 2525:localhost:2525 root@your_server`
 4. Configure a test binding that points at `fake SMTP` server
 
 ```
