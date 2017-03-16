@@ -1,0 +1,281 @@
+<html>
+<head>
+<style>
+    table, th, td {
+        border: 1px solid #55555a;
+        border-collapse: collapse;
+    }
+    th, td {
+        padding: 5px;
+        text-align: left;
+    }
+    table {
+        width: 100%;
+        background-color: #FEFEFE;
+    }
+    div.eventDescription {
+        padding:20px;
+        background-color: #F4F4F4;
+        border-style: solid;
+        border-color: #F0F0F0;
+        box-shadow: 10px 10px 5px #888888;
+        width: 80%;
+        margin:0 auto;
+    }
+    div.preamble {
+        padding:20px;
+        background-color: #F4F4F4;
+        border-style: solid;
+        border-color: #F0F0F0;
+        box-shadow: 10px 10px 5px #888888;
+        width: 80%;
+        margin:0 auto;
+    }
+    div.error {
+        padding:20px;
+        background-color: #F4F4F4;
+        border-style: solid;
+        border-color: #F0F0F0;
+        box-shadow: 10px 10px 5px #888888;
+        width: 80%;
+        margin:0 auto;
+        color:red;
+    }
+</style>
+    
+    
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"> </script> 
+<script type="text/javascript" src="./webhook_event.json"> </script>
+<script>
+
+function generateHelp(data) {
+    // Results
+    var results = data['results'];
+    
+    var indexTable = '<br><br><hr><div id="top"/><center><table>\n';
+    
+    // Event List Table
+    indexTable += '<tr bgcolor="#fa6423">' + 
+                '<th colspan="2"><center>Event</center></th>' + 
+                '<th><center>Description</center></th>' + 
+            '</tr>\n';
+    
+    var div = document.getElementById('webhookevents');
+     div.innerHTML = "";
+    
+    var eventNames = Object.keys(results);
+    for (resultIdx in eventNames) {
+        console.log("key: ", eventNames[resultIdx]);
+        var event = results[eventNames[resultIdx]];
+        
+        indexTable += '<tr bgcolor="#EEEEEE"><td colspan="2" ><a href="#' + eventNames[resultIdx] + '"><b>' + event.display_name + '</b></a></td> <td>' + event.description + '</td>'  + '</tr>\n';
+        
+        var div = document.getElementById('webhookevents');
+        div.innerHTML = div.innerHTML + '<div id="' + eventNames[resultIdx] + '"><br><b>' + event.display_name + '<b><br></div>';
+        div.innerHTML += '<br>' + event.description + '<br>';
+        
+        var eventTypes = event.events;
+        var types = Object.keys(eventTypes);
+        for (typeIdx in types) {
+            console.log("\tType: ", types[typeIdx]); 
+            var eventFieldWrapper = eventTypes[types[typeIdx]];
+
+            div.innerHTML += '<br><br>'+
+            '<div class="eventDescription" id="' +types[typeIdx] + '">' + 
+                '<a href="#top">top</a> <br>' +
+                '<b>Group: </b>' + event.display_name + '<br>'+ 
+                '<b>Event Type: </b> <b>' + eventFieldWrapper.display_name + '</b><br>' +
+                '<b>Meaning: </b>' + eventFieldWrapper.description + '<br>'+ 
+            '</div>';
+            
+            
+            indexTable += '<tr>' + 
+                '<td></td>' + 
+                '<td><a href="#' + types[typeIdx] + '">'+ eventFieldWrapper.display_name + '</a></td>' + 
+                '<td>' + eventFieldWrapper.description + '</td>'  + 
+            '</tr>\n';
+
+            var fields = Object.keys(eventFieldWrapper.event);
+            
+            var table = '<div id=' + types[typeIdx] + '><br><br><center><table class="fieldTable" style="width:80%">\n';
+            table += '<tr bgcolor="#fa6423">' + 
+                '<th><center>Field</center></th>' + 
+                '<th><center>Type</center></th>' + 
+                '<th><center>Example</center></th>' + 
+                '<th><center>Description</center></th>' + 
+            '</tr>';
+             
+            for (fieldIdx in fields) {
+                console.log("\t\tField: ", fields[fieldIdx]);
+
+                var sampleValue = eventFieldWrapper.event[fields[fieldIdx]].sampleValue;
+                
+                var fieldType = "String";
+                var type = typeof eventFieldWrapper.event[fields[fieldIdx]].sampleValue;
+                if (type === "string") {
+                    fieldType = "String";
+                } else if (type === "number") {
+                    fieldType = "Number";
+                } else if (Array.isArray(eventFieldWrapper.event[fields[fieldIdx]].sampleValue)) {
+                    fieldType = "Array";
+                    sampleValue = JSON.stringify(sampleValue);
+                } else if (type === "object") {
+                    fieldType = "Object";
+                    sampleValue = JSON.stringify(sampleValue);
+                } else {
+                    fieldType = type;
+                    console.log("Unexpected Type: " + type);
+                }
+                           
+                table +=  "\n<tr>\n" + 
+                    "<td>" + fields[fieldIdx] + "</td>\n" + 
+                    "<td><center>" + fieldType + "</center></td>\n" + 
+                    "<td style='max-width:200px;word-wrap:break-word;'><center><i>" + sampleValue + "</i></center></td>\n" + 
+                    "<td>" + eventFieldWrapper.event[fields[fieldIdx]].description + "</td>\n" +  
+                "\t</tr>\n";
+            }
+            table += '</table></center></div>\n';
+            
+            div.innerHTML += table;
+        }
+    }
+    
+    indexTable += '</table></center>\n';
+    var indexDiv = document.getElementById('webhookIndex');
+    indexDiv.innerHTML = indexTable;
+    
+}
+    
+function onGenerateClicked() {
+    console.log("Generate Clicked!!!")
+    var div = document.getElementById('webhookevents');
+    //div.innerHTML = '<br><b>Loading....<b><br>';
+    $("#webhookevents").empty();
+    $("#webhookIndex").empty();
+    
+    urlDiv = document.getElementById('altUrl');
+    console.log("AltUrl: " + urlDiv.value)
+    
+    var dmJSON =  urlDiv.value;
+    $.getJSON( dmJSON, function(data) {
+        generateHelp(data);
+    })
+    .fail(function(jqXMLHttpRequest,textStatus,errorThrown) {
+        console.dir(jqXMLHttpRequest);
+        // alert('Ajax data request failed: "'+textStatus+':'+errorThrown+'" - see javascript console for details.');
+        var div = document.getElementById('webhookIndex');
+        div.innerHTML = '<br><br><div class="error">Ajax data request failed: "'+textStatus+':'+errorThrown+'" - see javascript console for details.</div><br><br>';
+    });
+}
+    
+$(function() {
+    var entries = [];
+    var localOnly = false;
+    
+    //var dmJSON = "http://spock.trymsys.net/api/v1/webhooks/events/documentation";
+    var dmJSON = "https://api.sparkpost.com/api/v1/webhooks/events/documentation";
+    var div = document.getElementById('altUrl');
+    div.value = dmJSON;
+    
+    if (localOnly) {
+        generateHelp(jsonData);
+    } else {
+        
+        $.getJSON( div.value , function(data) {
+            generateHelp(data);
+        });
+    }
+
+});
+    
+$(document).ready(function() {
+  $("#altUrl").keypress(function(event) {
+    if(event.which == '13') {
+      onGenerateClicked();  
+      return false;
+    }
+  });
+});
+
+</script>    
+</head>
+
+<body>
+    
+<b>Webooks Documentation URL:</b><br><textarea id="altUrl" rows="1" cols="100">https://api.sparkpost.com/api/v1/webhooks/events/documentation</textarea><button onclick="onGenerateClicked()">Generate</button>
+
+<div class="wrapper">
+    <br><br>
+    <div class="preamble">
+    This is a reference guide for developers who are consuming Webhook Events and need to understand the structure of the events being sent. Transmitting events to a server for your web or mobile application provides near real-time detailed information about your Email Transmissions.
+    <br><br>
+    There are several types of events which provide your system data concerning an email's life cycle. They are organized by Event Types which contain various Events with each Event being composed of Event Properties. The following tables can be used as a reference while working with Webhooks
+        
+    <br><br>
+    See also: <a href="https://www.sparkpost.com/blog/webhooks-beyond-the-basics/">Webhooks: Beyond The Basics</a>
+    <br><br>
+    Webhook are JSON objects. A single post constains an array of events. Here is an exampe of actual Webhook data:
+        
+    <pre>
+[
+  {
+    "msys": {
+      "message_event": {
+        "timestamp": "1479333170",
+        "friendly_from": "user@example.com",
+        "msg_size": "3006",
+        "customer_id": "1521",
+        "subject": "Sending with SparkPost is Fun",
+        "template_version": "0",
+        "template_id": "template_30423932846795350",
+        "routing_domain": "example.com",
+        "rcpt_to": "test1@example.com",
+        "event_id": "30423932847017907",
+        "sending_ip": "52.38.191.214",
+        "transmission_id": "30423932846795350",
+        "ip_pool": "shared",
+        "rcpt_meta": {},
+        "msg_from": "msprvs1=17128dLgSde2B=bounces-1521@sparkpostmail1.com",
+        "message_id": "000132d52c58b7630362",
+        "rcpt_tags": [],
+        "type": "injection",
+        "raw_rcpt_to": "test1@ajdflkajsdflkjaslkdjflkasdjfljasdlfjlkasdjf.com"
+      }
+    }
+  },
+  {
+    "msys": {
+      "message_event": {
+        "rcpt_to": "test2@example.com",
+        "subject": "Sending with SparkPost is Fun",
+        "customer_id": "1521",
+        "transmission_id": "30423932846795350",
+        "event_id": "30423932847017911",
+        "timestamp": "1479333170",
+        "friendly_from": "chris@example.com",
+        "routing_domain": "example.com",
+        "template_version": "0",
+        "ip_pool": "shared",
+        "type": "injection",
+        "rcpt_meta": {},
+        "template_id": "template_30423932846795350",
+        "msg_from": "msprvs1=17128dLgSde2B=bounces-1521@sparkpostmail1.com",
+        "rcpt_tags": [],
+        "message_id": "000132d52c58b7630462",
+        "sending_ip": "52.38.191.218",
+        "msg_size": "3101",
+        "raw_rcpt_to": "test2@example.com"
+      }
+    }
+  }
+] 
+    </pre>
+        
+    The rest of this document define the various webhook events and the fields the evetns contain.
+    </div>
+    <div id="webhookIndex" class="events">
+</div>
+    <div id="webhookevents" class="events"></div>
+</div>
+</body>
+</html>
