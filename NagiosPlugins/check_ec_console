@@ -1,0 +1,199 @@
+#!/opt/msys/3rdParty/bin/perl
+
+use lib '/opt/ecelerity/lib/perl/';
+
+use Ecelerity::Control;
+use Getopt::Long;
+use XML::Simple;
+use Data::Dumper;
+use Pod::Usage;
+  
+  # get a list of known parsers
+#if ( ! XML::SAX->add_parser(q(XML::SAX::PurePerl)) )
+#  {
+#  XML::SAX->save_parsers();
+#  }
+#
+#  print XML::SAX->parsers();
+
+
+my %rtn;  # Nagios return codes and strings
+$rtn{'0'} = "OK";
+$rtn{'1'} = "WARNING";
+$rtn{'2'} = "CRITICAL";
+$rtn{'3'} = "UNKNOWN";
+
+my %opt;
+$opt{port} = '/tmp/2025';
+$opt{grep} = '';
+$opt{debug} = '';
+$opt{test} = '';
+
+GetOptions( \%opt,
+                "help",
+                "port:s",                 # ec_console control port.  Default: /tmp/2025
+                "user:s",                 # ec_console username
+                "pass:s",                 # ec_console passwd
+                "cmd:s",                  # ec_console command
+                "key:s",                  # key to check from cmd output
+                "key2:s",                 # key to check from cmd output
+                "grep:s",                 # use this regex to grep for key instead of parsing XML
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "showThresh",             # Toggle output of Threshold setting
+                "consoleDebug|ninja",     # put the console in debug mode with command: debugging mode
+                "test",                   # don't execute any commands
+                "debug"                   # verbose
+          );
+
+# Dump args for debugging
+if ( $opt{debug} )
+  {
+  print "Got Args:\n";
+  foreach my $key ( sort(keys(%opt)) )
+    {
+    print "   $key:$opt{$key}\n";
+    }
+  }
+
+# check opts
+my $msg = '';
+usage() if $opt{help};
+$msg .= "cmd " if !$opt{cmd};
+$msg .= "key " if !$opt{key};
+$msg .= "warn " if ( $opt{warn} eq '' && $opt{warn} ne '0' );
+$msg .= "crit " if ( $opt{crit} eq '' && $opt{crit} ne '0' );
+print "Missing args: $msg\n" if $msg;
+usage($msg) if $msg;
+
+
+my $ecc;
+if ( $opt{user} && $opt{pass} )
+        { $ecc = Ecelerity::Control->new( { Control => $opt{port}, User => $opt{user}, Pass => $opt{pass} } ); }
+else
+        { $ecc = Ecelerity::Control->new( { Control => $opt{port} } ); }
+
+eval { $ecc->connect(); };
+  if ($@) {
+        # Catch any could not connect error
+        $@ =~ /^(.*) at/; # Fetch just the error message and no file/line no.
+        print "CRITICAL - Error connecting to ec_console: $1\n";
+        exit(2);
+  }
+
+
+if ( $opt{consoleDebug} )
+	{
+	my $ref = $ecc->command( "debugging mode" );
+	chomp($ref);
+	print "Failed to enter debugging mode\n" if $ref ne 'I am Ten Ninjas';
+	}
+
+my $ref = "";
+my $val = "";
+if ( ! $opt{grep} )
+{
+print "Going to parse XML\n" if $opt{debug};
+# This throws a non-fatal error to STDERR since we are missing the ParserDetails.ini file.
+$ref = ( XMLin($ecc->command( $opt{cmd} ), ForceArray => '1' ) );
+
+
+#print Dumper($ref);
+if ( $opt{debug} )
+  {
+  print "All Data:\n";
+  foreach my $key ( sort(keys(%{$ref})) )
+    {
+  print "   $key = " . $ref -> {$key}[0] . "\n";
+    }
+  }
+
+
+$val = $ref -> {"$opt{'key'}"}[0];
+
+#$val = $ref -> $opt{keys} if $keys;
+print "Got:\n   $opt{key}:$val\n" if $opt{debug};
+}
+else
+	{
+	print "Going to do grep\n" if $opt{debug};
+	$ref = ($ecc->command($opt{cmd})); 
+	my $regex = $opt{grep};
+	$ref =~ /$regex/;
+	$val = $1;
+	}
+
+if ( $val eq "" )
+  {
+  print $rtn{3}, ": No data returned for cmd: $opt{cmd}. key: $opt{key}\n";
+  exit(3);
+  }
+
+my $show = "";
+if ( $opt{showThresh} )
+	{
+	my $tmp ="";
+	$tmp = $opt{warn} ? $opt{warn} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= " Warning: $tmp";
+	$show .= ", Warning (High): $opt{hiWarn}" if $opt{hiWarn};
+	$tmp = $opt{crit} ? $opt{crit} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= ", Critical: $tmp";
+	$show .= ", Critical (High): $opt{hiCrit}" if $opt{hiCrit};
+	$show = "- Thresholds -" . $show;
+	}
+
+# Threshold logic
+if ( ($opt{crit} ne '0') && ($val > $opt{crit}) )
+	{
+	print $rtn{2}, "-  $opt{key} = $val $show\n";
+	exit(2);
+	}
+elsif ( ($opt{warn} ne '0' ) && ($val > $opt{warn}) )
+	{
+	print $rtn{1}, " - $opt{key} = $val $show\n";
+	exit(1);
+	}
+
+print $rtn{0}, " - $opt{key} = $val $show\n";
+exit(0);
+
+sub usage
+  {
+  pod2usage(2);
+  exit(0);
+  print "This is the Nagios NRPE Plugin Template.  Put your stuff here.";
+  print "usage: $0 \n";
+  print "\n";
+  exit;
+  }
+
+
+
+
+__END__
+
+=head1 NAME
+
+check_ec_console
+
+=head1 SYNOPSIS
+
+check_ec_console [-port] [-user] [-passwd] [-cmd] [-key] [-type] [-warn] [-crit]
+
+Options:
+
+-port  The control port used to connect to the ec_console.
+
+-user             Console username.
+
+-passwd           Console passwd.
+
+-h, -help This message.
+
+=cut
+
+
+
+

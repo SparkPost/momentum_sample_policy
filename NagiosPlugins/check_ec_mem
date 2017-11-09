@@ -1,0 +1,196 @@
+#!/opt/msys/3rdParty/bin/perl
+
+use Ecelerity::Control;
+use Getopt::Long;
+use Pod::Usage;
+  
+
+my %rtn;  # Nagios return codes and strings
+$rtn{'0'} = "OK";
+$rtn{'1'} = "WARNING";
+$rtn{'2'} = "CRITICAL";
+$rtn{'3'} = "UNKNOWN";
+
+my %opt;
+$opt{port} = '/tmp/2025';
+$opt{debug} = '';
+$opt{test} = '';
+
+GetOptions( \%opt,
+                "help",
+                "port:s",                 # ec_console control port.  Default: /tmp/2025
+                "user:s",                 # ec_console username
+                "pass:s",                 # ec_console passwd
+                "cmd:s",                  # ec_console command
+                "field:s",                # the feild to rerturn
+                "key:s",                  # key to check from cmd output
+                "key2:s",                 # key to check from cmd output
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "showThresh",             # Toggle output of Threshold setting
+                "consoleDebug|ninja",     # put the console in debug mode with command: debugging mode
+                "test",                   # don't execute any commands
+                "debug"                   # verbose
+          );
+
+# Dump args for debugging
+if ( $opt{debug} )
+  {
+  print "Got Args:\n";
+  foreach my $key ( sort(keys(%opt)) )
+    {
+    print "   $key:$opt{$key}\n";
+    }
+  }
+
+# check opts
+my $msg = '';
+usage() if $opt{help};
+#$msg .= "cmd " if !$opt{cmd};
+$msg .= "key " if !$opt{key};
+#$msg .= "warn " if ( $opt{warn} eq '' && $opt{warn} ne '0' );
+#$msg .= "crit " if ( $opt{crit} eq '' && $opt{crit} ne '0' );
+print "Missing args: $msg\n" if $msg;
+usage($msg) if $msg;
+
+$opt{cmd} = "memory";
+
+
+my $ecc;
+if ( $opt{user} && $opt{pass} )
+        { $ecc = Ecelerity::Control->new( { Control => $opt{port}, User => $opt{user}, Pass => $opt{pass} } ); }
+else
+        { $ecc = Ecelerity::Control->new( { Control => $opt{port} } ); }
+
+$ecc->connect();
+if ( $opt{consoleDebug} )
+	{
+	my $ref = $ecc->command( "debugging mode" );
+	chomp($ref);
+	print "Failed to enter debugging mode\n" if $ref ne 'I am Ten Ninjas';
+	}
+
+my @ref = $ecc->command( $opt{cmd} );
+
+if ( $opt{debug} )
+  {
+  print "All Data:\n";
+  print "@ref\n";
+  print "num lines: ", $#ref+1, "\n";
+  }
+
+
+my $val = "";
+foreach my $line ( @ref )
+	{
+	my $tmp = $opt{key};
+	if ( $line =~ /$tmp(.*)/m  )
+		{
+		$val = $1;
+		$val =~ s/://g;
+		$val =~ s/%//g;
+		$val =~ s/\s+/ /g;
+		chomp($val);
+		last;
+		}
+	}
+
+my @f = split(/ /, $val);
+$val = $f[$opt{field}-1];
+print "num fields: ", $#f+1, "\n" if $opt{debug};
+print "Got:\n   $opt{key}:$val\n" if $opt{debug};
+
+$opt{warn} = getConfig("Memory_Goal") eq 'unset' ? '0' : getConfig("Memory_Goal");
+$opt{crit} = getConfig("Memory_HWM") eq 'unset' ? '0' : getConfig("Memory_HWM");
+
+
+
+if ( $val eq "" )
+  {
+  print $rtn{3}, ": No data returned for cmd: $opt{cmd}. key: $opt{key}\n";
+  exit(3);
+  }
+
+my $show = "";
+if ( $opt{showThresh} )
+	{
+	my $tmp ="";
+	$tmp = $opt{warn} ? $opt{warn} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= " Warning: $tmp";
+	$show .= ", Warning (High): $opt{hiWarn}" if $opt{hiWarn};
+	$tmp = $opt{crit} ? $opt{crit} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= ", Critical: $tmp";
+	$show .= ", Critical (High): $opt{hiCrit}" if $opt{hiCrit};
+	$show = "- Thresholds -" . $show;
+	}
+
+# Threshold logic
+if ( ($opt{crit} ne '0') && ($val gt $opt{crit}) )
+	{
+	print $rtn{2}, "-  $opt{key} = $val $show\n";
+	exit(2);
+	}
+elsif ( ($opt{warn} ne '0' ) && ($val gt $opt{warn}) )
+	{
+	print $rtn{1}, " - $opt{key} = $val $show\n";
+	exit(1);
+	}
+
+print $rtn{0}, " - $opt{key} = $val $show\n";
+exit(0);
+
+sub getConfig
+{
+my ($arg) = @_;
+my $ref = $ecc->command( "config get $arg" );
+chomp($ref);
+$ref =~ s/"//g;
+return("unset") if $ref =~ /unset/;
+
+$ref =~ s/\s+//g;
+($a, $ref) = split(/=/, $ref);
+return($ref) if $ref;
+
+return("unknown");
+}
+
+sub usage
+  {
+  pod2usage(2);
+  exit(0);
+  print "This is the Nagios NRPE Plugin Template.  Put your stuff here.";
+  print "usage: $0 \n";
+  print "\n";
+  exit;
+  }
+
+
+
+
+__END__
+
+=head1 NAME
+
+check_ec_console
+
+=head1 SYNOPSIS
+
+check_ec_console [-port] [-user] [-passwd] [-cmd] [-key] [-type] [-warn] [-crit]
+
+Options:
+
+-port  The control port used to connect to the ec_console.
+
+-user             Console username.
+
+-passwd           Console passwd.
+
+-h, -help This message.
+
+=cut
+
+
+
+

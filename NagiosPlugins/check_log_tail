@@ -1,0 +1,172 @@
+#!/opt/msys/3rdParty/bin/perl
+
+use lib '/opt/ecelerity/lib/perl/';
+
+use Getopt::Long;
+use Pod::Usage;
+
+  
+
+my %rtn;  # Nagios return codes and strings
+$rtn{'0'} = "OK";
+$rtn{'1'} = "WARNING";
+$rtn{'2'} = "CRITICAL";
+$rtn{'3'} = "UNKNOWN";
+
+my %opt;
+$opt{debug} = '';
+$opt{test} = '';
+$opt{logname} = 'paniclog/*';
+$opt{lines} = '100';
+$opt{path} = `date +'/data/%Y/%m/%d'`;
+chomp($opt{path});
+$opt{cmd} = "tail -n %LINES% %PATH% | egrep '%GREP%'";
+
+GetOptions( \%opt,
+                "help",
+                "path:s",                 # the path to look for logs
+                "logname:s",              # which log to look at.  paniclog, rejectlog, etc.
+                "grep:s",                 # the grep string to use
+                "lines:s",                # number of line to look back (tail)
+                "cmd:s",                  # the full command string to use if not default
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands
+                "debug"                   # verbose
+          );
+
+
+
+# Dump args for debugging
+if ( $opt{debug} )
+  {
+  print "Got Args:\n";
+  foreach my $key ( sort(keys(%opt)) )
+    {
+    print "   $key:$opt{$key}\n";
+    }
+  }
+
+# check opts
+my $msg = '';
+usage() if $opt{help};
+$msg .= "cmd " if !$opt{cmd};
+$msg .= "grep " if !$opt{grep};
+$msg .= "lines " if !$opt{lines};
+$msg .= "logname " if !$opt{logname};
+$msg .= "warn " if ( $opt{warn} eq '' && $opt{warn} ne '0' );
+$msg .= "crit " if ( $opt{crit} eq '' && $opt{crit} ne '0' );
+$msg .= "crit cannot be greater than warn" if ( $opt{crit} > $opt{warn} );
+print "Missing args: $msg\n" if $msg;
+usage($msg) if $msg;
+
+$opt{path} .= "/$opt{logname}";
+$opt{cmd} =~ s/%LINES%/$opt{lines}/;
+$opt{cmd} =~ s/%PATH%/$opt{path}/;
+$opt{cmd} =~ s/%GREP%/$opt{grep}/;
+
+print $opt{cmd}, "\n" if $opt{debug};
+
+my $show = "";
+if ( $opt{showThresh} )
+	{
+	my $tmp ="";
+	$tmp = $opt{warn} ? $opt{warn} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= " Warning: $tmp";
+	$show .= ", Warning (High): $opt{hiWarn}" if $opt{hiWarn};
+	$tmp = $opt{crit} ? $opt{crit} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= ", Critical: $tmp";
+	$show .= ", Critical (High): $opt{hiCrit}" if $opt{hiCrit};
+	$show = "- Thresholds:" . $show;
+	}
+
+my $curTime = time();
+my $rts = $rtn{0} . " - No matches found. Log looks clean. $show\n";
+my $rtc ='0';
+
+foreach my $i ( `$opt{cmd}` )
+	{
+	chomp($i);
+	(my $time, $str) = split(/:/, $i, 2 );
+	print "time: $time - curTime: $curTime = ", $curTime - $time, "\n" if $opt{debug};
+	if ( ($curTime - $time) < 0 )
+		{
+		$rts = "UNKNOWN - Your clocks are screwed up!  Can you spell 'NTP'??? curTime - time = ". ($curTime - $time). "\n";
+		$rtc = 3;
+		print $rts;
+		exit($rtc);
+		}
+	elsif (  ($curTime - $time) >= $opt{warn} )
+		{
+		print "too old.  skipping (", ($curTime - $time), ")\n" if $opt{debug};
+		next;
+		}
+	elsif (  ($curTime - $time) <= $opt{crit} )
+		{
+		$rtc = '2' if $rtn ne '2';
+		}
+	elsif (  ($curTime - $time) <= $opt{warn} )
+		{
+		$rtc = '1' if $rtn ne '1';
+		}
+	$hits{$time} = $str;
+	}
+
+
+
+
+
+
+$rts = $rtn{$rtc} . " - $rtc - Match found within time range $show\n" if $rtc;
+$rts .= "Found log at: $opt{path}\n";
+print $rts;
+foreach my $key ( sort(keys(%hits)) )
+	{
+	print "$key:$hits{$key} - ", ($curTime - $key), " seconds old\n";
+	}
+
+exit($rtc);
+
+
+
+sub usage
+  {
+  pod2usage(2);
+  exit(0);
+  print "This is the Nagios NRPE Plugin Template.  Put your stuff here.";
+  print "usage: $0 \n";
+  print "\n";
+  exit;
+  }
+
+
+
+
+__END__
+
+=head1 NAME
+
+check_ec_console
+
+=head1 SYNOPSIS
+
+check_ec_console [-port] [-user] [-passwd] [-cmd] [-key] [-type] [-warn] [-crit]
+
+Options:
+
+-port  The control port used to connect to the ec_console.
+
+-user             Console username.
+
+-passwd           Console passwd.
+
+-h, -help This message.
+
+=cut
+
+
+
+

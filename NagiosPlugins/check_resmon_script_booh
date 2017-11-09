@@ -1,0 +1,128 @@
+#!/opt/msys/3rdParty/bin/perl -w
+
+use Getopt::Long;
+
+
+my %rtn;  # Nagios return codes and strings
+$rtn{'0'} = "OK";
+$rtn{'1'} = "WARNING";
+$rtn{'2'} = "CRITICAL";
+$rtn{'3'} = "UNKNOWN";
+
+
+my %opt;
+
+$opt{debug} = '';
+$opt{test} = '';
+$opt{warn} = '0';
+$opt{crit} = '0';
+
+
+
+GetOptions( \%opt,
+                "help",
+                "cmd:s",                  # The resmon (booh) script to check
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands (not always implemented)
+                "debug"                   # verbose
+          );
+
+
+# Dump args for debugging
+if ( $opt{debug} )
+  {
+  print "Got Args:\n";
+  foreach my $key ( sort(keys(%opt)) )
+    {
+    print "   $key:$opt{$key}\n";
+    }
+  }
+
+# check opts
+my $msg = '';
+usage() if $opt{help};
+$msg .= "cmd " if !$opt{cmd};
+$msg .= "warn " if ( $opt{warn} eq '' && $opt{warn} ne '0' );
+$msg .= "crit " if ( $opt{crit} eq '' && $opt{crit} ne '0' );
+print "Missing args: $msg\n" if $msg;
+usage($msg) if $msg;
+
+my $show = "";
+if ( $opt{showThresh} )
+	{
+	my $tmp ="";
+	$tmp = $opt{warn} ? $opt{warn} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= " Warning: $tmp";
+	$show .= ", Warning (High): $opt{hiWarn}" if $opt{hiWarn};
+	$tmp = $opt{crit} ? $opt{crit} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= ", Critical: $tmp";
+	$show .= ", Critical (High): $opt{hiCrit}" if $opt{hiCrit};
+	$show = "Thresholds -" . $show;
+	}
+
+
+
+#################################################################
+
+if ( -x $opt{cmd} )
+	{
+	my $rs = `$opt{cmd}`;
+	print $rs if $opt{debug};
+	$rs =~ /(OK|BAD|WARNING)?\(?(.*)/s ;
+	print "\$1 = $1, \$2 = $2\n" if $opt{debug};
+	if ( $1 eq 'BAD' )
+		{
+		print "$rtn{2} - $2\n$show\n";
+		exit(2);
+		}
+	if ( $1 eq 'WARNING' )
+		{
+		print "$rtn{1} - $2\n$show\n";
+		exit(1);
+		}
+	if ( $1 eq 'OK' )
+		{
+		print "$rtn{0} - $2 $show\n";
+		exit(0);
+		}
+	}
+else
+	{
+	print "$rtn{3} - Could not find Resmon (booh) script at: $opt{cmd}\n$!";
+	exit(3);
+	}
+
+print "$rtn{3} - Something went wrong.  Possibly bad output from Resmon (booh) script?\n";
+exit(3);
+
+#################################################################
+
+
+
+usage() if $opt{help};
+
+sub usage
+	{
+	print "This Nagios plugin executes and checks output from a Resmon (booh) script.\nThis should only be used as a temp solution.\n";
+	print "usage: $0 -cmd <pathToResmonScript> \n";
+	print "\n";
+
+        print <<EOF;
+                "help",
+                "cmd:s",                  # The resmon (booh) script to check
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands (not always implemented)
+                "debug"                   # verbose
+
+EOF
+	exit;
+	}
+

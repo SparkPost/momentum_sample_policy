@@ -1,0 +1,171 @@
+#!/opt/msys/3rdParty/bin/perl
+
+use Getopt::Long;
+use Pod::Usage;
+  
+
+
+my %rtnc;  # Nagios return codes and strings
+$rtnc{'0'} = "OK";
+$rtnc{'1'} = "WARNING";
+$rtnc{'2'} = "CRITICAL";
+$rtnc{'3'} = "UNKNOWN";
+
+my %opt;
+$opt{port} = '/tmp/2025';
+$opt{debug} = '';
+$opt{test} = '';
+$opt{cmd} = '/usr/bin/svn';
+
+GetOptions( \%opt,
+                "help",
+                "user:s",                 # svn username
+                "pass:s",                 # svn passwd
+                "cmd:s",                  # svn command
+                "repos:s",                # the repository to check
+                "noSSL",                  # We use SSL by default. set this if you don't want it
+                "long",                   # Show all the output from the SVN command.  Nagios may truncate.
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands
+                "debug"                   # verbose
+          );
+
+# Dump args for debugging
+if ( $opt{debug} )
+  {
+  print "Got Args:\n";
+  foreach my $key ( sort(keys(%opt)) )
+    {
+    print "   $key:$opt{$key}\n";
+    }
+  }
+
+# check opts
+my $msg = '';
+usage() if $opt{help};
+$msg .= "cmd " if !$opt{cmd};
+$msg .= "repos " if ( $opt{repos} eq ''  );
+$msg .= "warn " if ( $opt{warn} eq '' && $opt{warn} ne '0' );
+$msg .= "crit " if ( $opt{crit} eq '' && $opt{crit} ne '0' );
+print "Missing args: $msg\n" if $msg;
+usage($msg) if $msg;
+
+#####################################################################
+
+my $rtns;
+my @lines;
+my %counts;
+my $show = "";
+my $ecode = "0";
+
+# make sure the repository exists
+if ( ! -d "$opt{repos}" )
+	{ print "$rtnc{3} - Local repository \"$opt{repos}\" was not found!\n"; exit(3); }
+elsif ( ! -d "$opt{repos}/.svn" )
+	{ print "$rtnc{3} - Directory \"$opt{repos}\" does not appear to be a SVN repository\n"; exit(3); }
+if ( ! -x "$opt{cmd}" )
+	{ print "$rtnc{3} - SVN executable \"$opt{cmd}\" was not found!\n"; exit(3); }
+
+@lines = `$opt{cmd} status $opt{repos}`;
+if ( scalar(@lines) == 0 )
+	{ print "$rtnc{0} - Repository at \"$opt{repos}\" is up to date.\n"; exit(0); }
+
+# count each type of diff
+for ( 0 ... $#lines )
+	{
+	chomp;
+	my ($a,$b) = split(/ /,$lines[$_],2);
+	$counts{$a}++;
+	}
+
+# build the return string
+if ( $counts{M} )
+	{ $rtns .= "Modified: " . $counts{'M'} .", "; }
+if ( $counts{'!'} )
+	{ $rtns .= "Missing: " . $counts{'!'} .", "; }
+if ( $counts{'?'} )
+	{ $rtns .= "Not SVN'd: " . $counts{'?'} .", "; }
+if ( $counts{'A'} )
+	{ $rtns .= "Marked for Add: " . $counts{'A'} .", "; }
+if ( $counts{'D'} )
+	{ $rtns .= "Marked for Delete: " . $counts{'D'} .", "; }
+if ( $counts{'R'} )
+	{ $rtns .= "Marked for Replace: " . $counts{'R'} .", "; }
+if ( $counts{'C'} )
+	{ $rtns .= "Conflicts: " . $counts{'C'} .", "; }
+
+
+$rtns =~ s/, $//g; # remove the last comma
+$cnt = $#lines+1;
+$rtns = "Change Status - Total: " . $cnt . " - " . $rtns;
+
+if ( $opt{showThresh} )
+	{
+	my $tmp ="";
+	$tmp = $opt{warn} ? $opt{warn} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= " Warning: $tmp";
+	$show .= ", Warning (High): $opt{hiWarn}" if $opt{hiWarn};
+	$tmp = $opt{crit} ? $opt{crit} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= ", Critical: $tmp";
+	$show .= ", Critical (High): $opt{hiCrit}" if $opt{hiCrit};
+	$show = "- Thresholds -" . $show;
+	}
+
+# Threshold logic
+if ( ($opt{crit} ne '0') && ($cnt >= $opt{crit}) )
+	{
+	$ecode = "2";
+	}
+elsif ( ($opt{warn} ne '0' ) && ($cnt >= $opt{warn}) )
+	{
+	$ecode = "1";
+	}
+
+print "$rtnc{$ecode} - $rtns $show\n";
+ print @lines if $opt{long};
+exit($ecode);
+
+
+
+#####################################################################
+
+sub usage
+  {
+  pod2usage(2);
+  exit(0);
+  print "This is the Nagios NRPE Plugin Template.  Put your stuff here.";
+  print "usage: $0 \n";
+  print "\n";
+  exit;
+  }
+
+
+
+
+__END__
+
+=head1 NAME
+
+check_ec_console
+
+=head1 SYNOPSIS
+
+check_repos [-user] [-passwd] [-cmd] [-warn] [-crit]
+
+Options:
+
+-user             SVN username.
+
+-passwd           SVN passwd.
+
+-h, -help This message.
+
+=cut
+
+
+
+

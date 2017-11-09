@@ -1,0 +1,153 @@
+#!/opt/msys/3rdParty/bin/perl -w
+
+use Getopt::Long;
+
+
+my %rtn;  # Nagios return codes and strings
+$rtn{'0'} = "OK";
+$rtn{'1'} = "WARNING";
+$rtn{'2'} = "CRITICAL";
+$rtn{'3'} = "UNKNOWN";
+
+
+my %opt;
+
+$opt{debug} = '';
+$opt{test} = '';
+$opt{dir} = '/var/log/ecelerity/traces';
+$opt{cmd} = 'find %DIR% -type f -mmin +%AGE%';
+$opt{warn} = '';
+$opt{crit} = '';
+
+GetOptions( \%opt,
+                "help",
+                "cmd:s",                  # The command to use to find files
+                "dir:s",                  # The directory to search for trace files
+                "age:s",                  # The max age of trace files
+                "excludes:s",             # Ignore these files.  Comma sep list
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands (not always implemented)
+                "debug"                   # verbose
+          );
+
+
+# Dump args for debugging
+if ( $opt{debug} )
+  {
+  print "Got Args:\n";
+  foreach my $key ( sort(keys(%opt)) )
+    {
+    print "   $key:$opt{$key}\n";
+    }
+  }
+
+# check opts
+my $msg = '';
+usage() if $opt{help};
+$msg .= "cmd " if !$opt{cmd};
+$msg .= "dir " if !$opt{dir};
+$msg .= "age " if !$opt{age};
+$msg .= "warn " if ( $opt{warn} eq '' && $opt{warn} ne '0' );
+$msg .= "crit " if ( $opt{crit} eq '' && $opt{crit} ne '0' );
+print "Missing args: $msg\n" if $msg;
+usage($msg) if $msg;
+
+my $show = "";
+if ( $opt{showThresh} )
+	{
+	my $tmp ="";
+	$tmp = $opt{warn} ? $opt{warn} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= " Warning: $tmp";
+	$show .= ", Warning (High): $opt{hiWarn}" if $opt{hiWarn};
+	$tmp = $opt{crit} ? $opt{crit} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= ", Critical: $tmp";
+	$show .= ", Critical (High): $opt{hiCrit}" if $opt{hiCrit};
+	$show = "- Thresholds -" . $show;
+	}
+
+
+
+#################################################################
+
+# build my list of excludes
+my $excludes = "";
+if ( $opt{excludes} )
+	{
+	my @files = split(/,/, $opt{excludes} );
+	foreach my $file (@files)
+		{
+		chomp($file);
+		$excludes .= " -and -not -name '$file' ";
+		}
+	}
+
+$opt{cmd} =~ s/%DIR%/$opt{dir}/;
+$opt{cmd} =~ s/%AGE%/$opt{age}/;
+$opt{cmd} .= $excludes if $excludes;
+
+my $num = `$opt{cmd}`;
+
+my @files = split(/\n/, $num);
+$num = $#files + 1;
+
+print "cmd: $opt{cmd}\n" if $opt{debug};
+print "num: $num\n" if $opt{debug};
+@files = join("\n", @files);
+print "files: @files\n" if $opt{debug};
+
+if ( ($opt{crit} ne '0') && ($num >= $opt{crit}) )
+	{
+	print "$rtn{2} - Found $num files in $opt{dir} more than $opt{age} minutes old $show\n";
+	print "Files found:\n@files\n";
+	exit(2);
+	}
+if ( ($opt{warn} ne '0') && ( $num >= $opt{warn}) )
+	{
+	print "$rtn{1} - Found $num files in $opt{dir} more than $opt{age} minutes old $show\n";
+	print "Files found:\n@files\n";
+	exit(1);
+	}
+
+print "$rtn{0} - No old files found\n";
+exit(0);
+
+
+#################################################################
+
+
+
+usage() if $opt{help};
+
+sub usage
+	{
+	print "This Nagios plugin checks a directory for recent files.\n";
+	print "usage: $0 \n";
+	print "\n";
+
+        print <<EOF;
+                "help",
+                "cmd:s",                  # The command to use to find files
+                "dir:s",                  # The directory to search for trace files
+                "age:s",                  # The max age of trace files
+                "excludes:s",             # Ignore these files.  Comma sep list
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands (not always implemented)
+                "debug"                   # verbose
+          );
+
+EOF
+	exit;
+	}
+
+
+
+
+

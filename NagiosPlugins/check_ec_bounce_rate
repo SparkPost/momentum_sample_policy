@@ -1,0 +1,278 @@
+#!/opt/msys/3rdParty/bin/perl -w
+
+use DBI;
+use POSIX qw(ceil floor);
+use DateTime;
+use DateTime::TimeZone;
+
+use Getopt::Long;
+
+my %rtn;  # Nagios return codes and strings
+$rtn{'0'} = "OK";
+$rtn{'1'} = "WARNING";
+$rtn{'2'} = "CRITICAL";
+$rtn{'3'} = "UNKNOWN";
+
+
+my %opt;
+
+$opt{debug} = '';
+$opt{test} = '';
+$opt{warn} = '0';
+$opt{crit} = '0';
+$opt{type} = 'binding';
+$opt{start} = '';
+$opt{end} = '';
+$opt{totalThresh} = '0';
+$opt{skipAllBinding} = '1';
+$opt{numPrevious} = '1'; # today only
+$opt{path} = '/var/log/eccluster/rt';
+
+
+GetOptions( \%opt,
+                "help",
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "path:s",                 # base path for sql3 files.  default: /var/log/eccluster/rt/
+                "type:s",                 # check per binding or per domain? default: binding (only binding works right now)
+                "start:s",                # check for bounces starting on this date. format: YYYYMMDD
+                "end:s",                  # check for bounces ending this date. format: YYYYMMDD (not yet implemented)
+                "totalThresh:s",          # only report when total messages is at least totalThresh
+                "numPrevious:s",          # check for bounces starting today (or start if defined) going back numPrevious days
+                                          # that is it counts backwards from the start time
+                "exclude:s",              # Don't report on these bindings/domains.  Comma sep list
+                "skipAllBinding!",        # Don't report on the binding named "__all__". default: true
+                "showData",               # Show all the data we get back from the DB query
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands (not always implemented)
+                "debug"                   # verbose
+          );
+
+
+# Dump args for debugging
+if ( $opt{debug} )
+  {
+  print "Got Args:\n";
+  foreach my $key ( sort(keys(%opt)) )
+    {
+    print "   $key:$opt{$key}\n";
+    }
+  }
+
+# check opts
+my $msg = '';
+usage() if $opt{help};
+$msg .= "warn " if ( $opt{warn} eq '' && $opt{warn} ne '0' );
+$msg .= "crit " if ( $opt{crit} eq '' && $opt{crit} ne '0' );
+#$msg .= "start " if ( ! $opt{start} );
+#if ( ! ($opt{end} =~ /(\d{8})/) )
+#	{ $msg .= 'end must be YYYYMMDD'; }
+$msg .= "numPrevious " if ( $opt{numPrevious} eq '' && $opt{end} ne '' );
+print "Missing args: $msg\n" if $msg;
+usage($msg) if $msg;
+
+$opt{numPrevious}--; # this just makes more sense
+
+my $show = "";
+if ( $opt{showThresh} || !$opt{crit} || !$opt{warn} )
+	{
+	my $tmp ="";
+	$tmp = $opt{warn} ? $opt{warn} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= " Warning: $tmp";
+	$show .= ", Warning (High): $opt{hiWarn}" if $opt{hiWarn};
+	$tmp = $opt{crit} ? $opt{crit} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= ", Critical: $tmp";
+	$show .= ", Critical (High): $opt{hiCrit}" if $opt{hiCrit};
+	$show = "- Thresholds -" . $show;
+	}
+
+
+
+#################################################################
+# build the exclude list
+my %exclude;
+if ( $opt{exclude} )
+	{
+	foreach my $ex ( split(/,/, $opt{exclude}) )
+		{
+		$exclude{$ex} = '1';
+		}
+	}
+print "excludes are: ", keys(%exclude), "\n" if $opt{debug};
+
+# set up the time ranges
+my $tz = DateTime::TimeZone->new( name => 'local' )->name;
+if ( $opt{start} && $opt{start} ne 'today' )
+	{
+	if ( !($opt{start} =~ /(\d{8})/ ) )
+		{ $msg .= 'start must be YYYYMMDD'; usage($msg); }
+	# if we get an invalid date DateTime will die so need some error checking here.
+	$opt{start} =~ /(\d{4})(\d{2})(\d{2})/;
+	$opt{start} = DateTime->new( year => $1, month => $2, day => $3, time_zone => "$tz" )->epoch;
+	}
+else
+	{
+	$opt{start} = time();
+	}
+if (  $opt{end} )
+	{
+	$opt{end} =~ /(\d{4})(\d{2})(\d{2})/;
+	$opt{end} = DateTime->new( year => $1, month => $2, day => $3, time_zone => "$tz" )->epoch;
+	}
+else
+	{
+	$opt{end} = $opt{start} - ( $opt{numPrevious} * 86400 );
+	}
+
+print "local timezone is: ", DateTime::TimeZone->new( name => 'local' )->name, "\n" if $opt{debug};
+print "start epoch is: ", $opt{start}, "\n" if $opt{debug};
+print " start date is: ", DateTime->from_epoch( epoch => $opt{start}, time_zone => "$tz" ), " ($opt{start})\n" if $opt{debug};
+print "  end epoch is: ", $opt{end}, "\n" if $opt{debug};
+print "   end date is: ", DateTime->from_epoch( epoch => $opt{end}, time_zone => "$tz" ), " ($opt{end})\n" if $opt{debug};
+
+
+# build the file list
+my @files;
+for ( 0 .. $opt{numPrevious} )
+	{
+	my $date = DateTime->from_epoch( epoch => ($opt{start} - ($_ * 86400)), time_zone => "$tz" );
+	my $file = "$opt{path}/" . $date->ymd('') . ".sql3";
+	print $file, "\n" if $opt{debug};
+	push(@files, $file);
+	}
+
+my $showData = '';
+my $rtc = 0; # assume OK
+my $rts = "";
+my %data;
+foreach my $file (@files)
+{
+chomp($file);
+if ( ! -e "$file" )
+	{
+	$rts .= "File not found: '$file', ";
+	$rtc = 3;
+	next;
+	}
+
+$dbh = DBI->connect( "dbi:SQLite:$file" ) or die "Cannot connect: $DBI::errstr"; # need to handle this error better for Nagios
+if ( $opt{type} eq 'binding')
+	{
+	$sql = "
+		  SELECT
+			binding as key,
+			(SUM(inband_count) + SUM(outofband_count)) AS bounced,
+			(
+			 SELECT (SUM(delivered) + SUM(permfail) + SUM(transfail)) as total
+			 FROM domain_details
+			 WHERE domain_bounces.binding = domain_details.binding
+			) as messages
+		  FROM domain_bounces
+		  GROUP BY binding
+		  ORDER BY bounced DESC
+		  LIMIT 20;
+	";
+	}
+if ( $opt{type} eq 'binding_group' )
+	{
+	$sql = "
+		  SELECT
+			binding_group as key,
+			(SUM(inband_count) + SUM(outofband_count)) AS bounced,
+			(
+			 SELECT (SUM(delivered) + SUM(permfail) + SUM(transfail)) as total
+			 FROM domain_details
+			 WHERE domain_bounces.binding_group = domain_details.binding_group
+			) as messages
+		  FROM domain_bounces
+		  GROUP BY binding_group
+		  ORDER BY bounced DESC
+		  LIMIT 20;
+	";
+	}
+
+$dbh->do($sql) or die $dbh->errstr;;
+my $rows = $dbh->selectall_arrayref($sql, { Slice => {} } );
+foreach my $row (@$rows)
+	{
+	next if !$row->{key};
+	$data{$row->{key}}->{bounced} += $row->{bounced};
+	$data{$row->{key}}->{messages} += $row->{messages};
+	}
+$dbh->disconnect;
+}
+
+foreach my $key (sort(keys(%data)))
+	{
+	my $p = '0';	
+	$p = ($data{$key}->{bounced} / $data{$key}->{messages}) * 100 if $data{$key}->{messages} ;
+	$p = ceil($p);
+	$showData .= $key . " " . $data{$key}->{bounced} . " / " . $data{$key}->{messages} . " = $p%\n";
+	next if $exclude{$key};
+	next if ( $opt{skipAllBinding} && $key eq '__all__' );
+	next if ( $data{$key}->{messages} < $opt{totalThresh} ) ;
+		
+	if ( $p >= $opt{crit} && $opt{crit} ne 0 )
+		{
+		$rtc = 2 if $rtc < 3; # don't downgrade to critical if we are already unknown;
+		$rts .= "$key ($data{$key}->{bounced} / $data{$key}->{messages}) $p%, ";
+		next;
+		}
+	if ( $p >= $opt{warn}  && $opt{warn} ne 0)
+		{
+		$rtc = 1 if $rtc < 2; # don't downgrade to warning if we are already critical
+		$rts .= "$key ($data{$key}->{bounced} / $data{$key}->{messages}) $p%, ";
+		next;
+		}
+	}
+
+$rts =~ s/, $//;
+$rts = "$rtn{$rtc} - $rts \n" if $rtc == 3; # unknown
+$rts = "$rtn{$rtc} - Bounce rate too high for $opt{type}(s): $rts $show\n" if $rtc < 3; # critical or warning
+$rts = "$rtn{$rtc} - All $opt{type}s within acceptable limits. $show\n" if ! $rtc; # OK
+print $rts;
+print $showData if $opt{showData};
+exit($rtc);
+
+
+#################################################################
+
+
+
+usage() if $opt{help};
+
+sub usage
+	{
+	print "Check the RT stats DBs for bounce rates based on binding or domains.\n";
+	print "usage: $0 \n";
+	print "\n";
+
+        print <<EOF;
+                "help",
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "path:s",                 # base path for sql3 files.  default: /var/log/eccluster/rt/
+                "type:s",                 # check per binding or per domain? default: binding (only binding works right now)
+                "start:s",                # check for bounces starting on this date. format: YYYYMMDD
+                "end:s",                  # check for bounces ending this date. format: YYYYMMDD (not yet implemented)
+                "totalThresh:s",          # only report when total messages is at least totalThresh
+                "numPrevious:s",          # check for bounces starting today (or start if defined) going back numPrevious days
+                                          # that is it counts backwards from the start time
+                "exclude:s",              # Don't report on these bindings/domains.  Comma sep list
+                "skipAllBinding!",        # Don't report on the binding named "__all__". default: true
+                "showData",               # Show all the data we get back from the DB query
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands (not always implemented)
+                "debug"                   # verbose
+
+EOF
+	exit(3);
+	}
+
+
+
+

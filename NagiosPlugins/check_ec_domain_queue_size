@@ -1,0 +1,242 @@
+#!/opt/msys/3rdParty/bin/perl -w
+
+use Getopt::Long;
+use Ecelerity::Control;
+
+my %rtn;  # Nagios return codes and strings
+$rtn{'0'} = "OK";
+$rtn{'1'} = "WARNING";
+$rtn{'2'} = "CRITICAL";
+$rtn{'3'} = "UNKNOWN";
+
+
+my %opt;
+
+$opt{debug} = '0';
+$opt{test} = '';
+$opt{warn} = '0';
+$opt{crit} = '0';
+$opt{queue} = 'Active';
+$opt{binding} = '';
+
+
+
+GetOptions( \%opt,
+                "help",
+		"queue:s",                # the queue to check (active/delayed)
+		"domain:s",               # the domain to check
+		"binding:s",              # the binding to check within queue
+		"port:s",                 # ec_console control port.  Default: /tmp/2025
+		"user:s",                 # ec_console username
+		"pass:s",                 # ec_console passwd
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "explain",                # show the ouput of the console command after the normal output
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands
+                "debug"                   # verbose
+          );
+
+
+# Dump args for debugging
+if ( $opt{debug} )
+  {
+  print "Got Args:\n";
+  foreach my $key ( sort(keys(%opt)) )
+    {
+    print "   $key:$opt{$key}\n";
+    }
+  }
+
+
+#$opt{domain} |= $opt{binding};
+
+# check opts
+my $msg = '';
+usage() if $opt{help};
+$msg .= "domain " if !$opt{domain};
+#$msg .= "binding " if !$opt{binding} && !$opt{domain};
+$msg .= "port " if !$opt{port};
+$msg .= "user " if !$opt{user};
+$msg .= "pass " if !$opt{pass};
+$msg .= "warn " if ( $opt{warn} eq '' && $opt{warn} ne '0' );
+$msg .= "crit " if ( $opt{crit} eq '' && $opt{crit} ne '0' );
+print "Missing args: $msg\n" if $msg;
+usage($msg) if $msg;
+
+
+
+#################################################################
+$opt{cmd} = "domain $opt{domain}";
+
+
+my $ecc;
+if ( $opt{user} && $opt{pass} )
+	{ $ecc = Ecelerity::Control->new( { Control => $opt{port}, User => $opt{user}, Pass => $opt{pass} } ); }
+else
+	{ $ecc = Ecelerity::Control->new( { Control => $opt{port} } ); }
+
+eval { $ecc->connect(); };
+  if ($@) {
+	# Catch any could not connect error
+	$@ =~ /^(.*) at/; # Fetch just the error message and no file/line no.
+	print "CRITICAL - Error connecting to ec_console: $1\n";
+	exit(2);
+  }
+
+
+if ( $opt{consoleDebug} )
+	{
+	my $ref = $ecc->command( "debugging mode" );
+	chomp($ref);
+	print "Failed to enter debugging mode\n" if $ref ne 'I am Ten Ninjas';
+	}
+
+if ( $opt{queue} =~ /delayed/i )
+	{ $opt{queue} = "Delayed"; }
+else { $opt{queue} = "Active"; }
+
+$ref = ($ecc->command($opt{cmd}));
+
+print $ref if $opt{debug} > 1;
+
+my $show = '';
+if ( $opt{showThresh} )
+        {
+        my $tmp ="";
+        $tmp = $opt{warn} ? $opt{warn} : '*Disabled*';  # print the word 'disabled' instead of 0
+        $show .= " Warning: $tmp";
+        $show .= ", Warning (High): $opt{hiWarn}" if $opt{hiWarn};
+        $tmp = $opt{crit} ? $opt{crit} : '*Disabled*';  # print the word 'disabled' instead of 0
+        $show .= ", Critical: $tmp";
+        $show .= ", Critical (High): $opt{hiCrit}" if $opt{hiCrit};
+        $show = "- Thresholds -" . $show;
+        }
+
+
+my $grep = 'Queue:';
+$grep = "$opt{queue} Queue:" if $opt{binding};
+print "$grep\n" if $opt{debug};
+
+if (  $ref =~ /$grep/m )
+	{
+	if ( $opt{domain} !~ /common/i )
+		{
+		my $total ='0';
+		$total = getTotal() if !$opt{binding};
+		$total = getBindingTotal() if $opt{binding};
+		print "Total is: $total \n" if $opt{debug};
+		if ( ($opt{crit} ne '0') && ($total >= $opt{crit}) )
+			{
+			print "$rtn{2} -  $opt{queue} Queue for domain $opt{domain}: $total $show\n" if !$opt{binding};
+			print "$rtn{2} -  $opt{queue} Queue for Domain '$opt{domain}' on Binding '$opt{binding}': $total $show\n" if $opt{binding};
+			print $ref, "\n" if $opt{explain};
+			exit(2);
+			}
+		if ( ($opt{warn} ne '0') && ($total >= $opt{warn}) )
+			{
+			print "$rtn{1} -  $opt{queue} Queue for Domain $opt{domain}: $total $show\n" if !$opt{binding};
+			print "$rtn{1} -  $opt{queue} Queue for Domain '$opt{domain}' on Binding '$opt{binding}': $total $show\n" if $opt{binding};
+			print $ref, "\n" if $opt{explain};
+			exit(1);
+			}
+		print "$rtn{0} -  $opt{queue} Queue for Domain $opt{domain}: $total $show\n" if !$opt{binding};
+		print "$rtn{0} -  $opt{queue} Queue for Domain '$opt{domain}' on Binding '$opt{binding}': $total $show\n" if $opt{binding};
+		print $ref, "\n" if $opt{explain};
+		#print "$rtn{0} - $opt{queue} Queue for Domain/binding $opt{domain}: $total $show\n";
+		}
+	else
+		{
+
+		}
+	}
+else
+	{
+	# this part is a little clumsy
+	if ( ! $ref )
+		{ print "$rtn{3} - No data returned from command: $opt{cmd} @ $opt{port}\n";  exit(3); }
+
+	if (   $ref )
+		{
+		print "$rtn{0} - $opt{domain} queue is idle!\n";
+		print $ref, "\n" if $opt{explain};
+		exit(0);
+		} 
+		
+	}
+
+sub getTotal
+	{
+	my ($arg) = @_;
+	@lines = split(/\n/, $ref);
+	for ( my $cnt = $#lines ; $cnt != 0 ; $cnt-- )
+		{
+		#print "$opt{queue} $grep\n" if $opt{debug};
+		if ( $lines[$cnt] =~ /\s*$opt{queue} $grep\s*(\d+).*/ )
+			{
+			print "Matched line($cnt): $lines[$cnt]\n" if $opt{debug};
+			return $1;
+			}
+		}
+	}
+sub getBindingTotal
+	{
+	my ($arg) = @_;
+	#print $ref if $opt{debug};
+	@lines = split(/\n/, $ref);
+	for ( my $cnt = 0 ; $cnt <= $#lines-1 ; $cnt++ )
+		{
+		if ( $lines[$cnt] =~ /\s*Binding:\s*$opt{binding}.*/ )
+			{
+			for ( my $cnt2 = $cnt ; $cnt2 <= $#lines-1 ; $cnt2++ )
+				{
+				if ( $lines[$cnt2] =~ /\s*$opt{queue} Queue:\s*(\d+).*/ )
+					{
+					print "1 Matched line($cnt): $lines[$cnt]\n" if $opt{debug};
+					print "2 Matched line($cnt2): $lines[$cnt2]\n" if $opt{debug};
+					return $1;
+					}
+				}
+			}
+		else { next; }
+		}
+	}
+
+#################################################################
+
+
+
+usage() if $opt{help};
+
+sub usage
+	{
+	print "This Nagios plugin checks the Active/Delayed queue for a specific domain.\n";
+	print "usage: $0 -user <consoleUser> -pass <consolePass> -port <consolePort>\n";
+	print "       -domain <domain> -queue <queue> -warn <warn> -crit <crit>\n";
+	print "\n";
+	print <<EOF;
+                "help",
+                "queue:s",                # the queue to check (active/delayed)
+                "domain:s",               # the domain to check
+                "binding:s",              # the binding to check within queue
+                "port:s",                 # ec_console control port.  Default: /tmp/2025
+                "user:s",                 # ec_console username
+                "pass:s",                 # ec_console passwd
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "explain",                # show the ouput of the console command after the normal output
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands
+                "debug"                   # verbose
+EOF
+	exit;
+	}
+
+
+
+
+

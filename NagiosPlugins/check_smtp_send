@@ -1,0 +1,89 @@
+#!/opt/msys/3rdParty/bin/perl -w
+
+use Getopt::Long;
+use Net::SMTP;
+
+use strict;
+
+my $msg = "SMTP SEND ";
+my %opt;
+$opt{to} = 'devnull@example.com';
+$opt{from} = 'nagios@nagios.example.com';
+$opt{subject} = 'Testing.';
+$opt{timeout} = '60';
+
+GetOptions( \%opt,
+			"timeout:i",
+			"host:s",
+			"banner:s",
+			"to:s",
+			"from:s",
+			"debug",
+			"data:s"
+		  );
+
+my $smtp;
+$smtp = Net::SMTP->new($opt{host}, Timeout => $opt{timeout});
+
+if ( ! $smtp )
+	{
+	$msg .= "CRITICAL - Couldn't create message, $!";
+	print $msg, "\n";
+	exit(2);
+	}
+
+
+my $banner = $smtp->banner();
+chomp($banner);
+print $banner, "\n" if $opt{debug};
+print "1: ", $smtp->code, " - ", $smtp->message() if $opt{debug};
+
+if ( ($opt{banner}) && ($banner) && !($banner =~ /$opt{banner}/) )
+	{
+	# banner mismatch
+	$msg .= "Banner mismatch, ";
+	}
+
+
+if ( ! $smtp->mail($opt{from}) )
+	{
+	$msg .= "CRITICAL - MAIL FROM not accepted";
+	print $msg, "\n";
+	exit(2);
+	}
+
+print "2: ", $smtp->code, " - ", $smtp->message() if $opt{debug};
+
+if ( ! $smtp->to($opt{to}) )
+	{
+	$msg .= "CRITICAL - RCPT TO not accepted";
+	print $msg, "\n";
+	exit(2);
+	}
+print "3: ", $smtp->code, " - ", $smtp->message() if $opt{debug};
+
+
+if ( ! $smtp->data("Subject: $opt{subject}\nFrom: $opt{from}\n\nNagios was here...\n") )
+	{
+	$msg .= "CRITICAL - DATA not accepted, " . $smtp->message();
+	print $msg, "\n";
+	exit(2);
+	}
+print "4: ", $smtp->code, " - ", $smtp->message() if $opt{debug};
+
+
+my $code = $smtp->code;
+chomp($code);
+my $response = $smtp->message;
+chomp($response);
+
+$smtp->quit();
+print "5: ", $smtp->code, " - ", $smtp->message() if $opt{debug};
+
+$response =~ s/^(.*)OK.? /OK - /is;
+$msg =~ s/, $//;
+$msg .= "$response";
+
+print $msg, "\n" if $msg;
+exit(0);
+

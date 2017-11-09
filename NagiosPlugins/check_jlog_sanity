@@ -1,0 +1,123 @@
+#!/opt/msys/3rdParty/bin/perl -w
+
+use Getopt::Long;
+
+
+my %rtn;  # Nagios return codes and strings
+$rtn{'0'} = "OK";
+$rtn{'1'} = "WARNING";
+$rtn{'2'} = "CRITICAL";
+$rtn{'3'} = "UNKNOWN";
+
+
+my %opt;
+
+$opt{debug} = '';
+$opt{test} = '';
+$opt{warn} = '0';
+$opt{crit} = '0';
+$opt{cmd} = '/opt/msys/ecelerity/bin/jlog_sanity_check.pl';
+
+
+GetOptions( \%opt,
+                "help",
+                "cmd:s",                  # The location of the jlog_sanity_check.pl tool
+                "endianness:s",           # big endian or little endian? intel=le spark=be
+                "jlog:s",                 # path to the jlog to check
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands (not always implemented)
+                "debug"                   # verbose
+          );
+
+
+# Dump args for debugging
+if ( $opt{debug} )
+  {
+  print "Got Args:\n";
+  foreach my $key ( sort(keys(%opt)) )
+    {
+    print "   $key:$opt{$key}\n";
+    }
+  }
+
+# check opts
+my $msg = '';
+usage() if $opt{help};
+$msg .= "cmd " if !$opt{cmd};
+$msg .= "warn " if ( $opt{warn} eq '' && $opt{warn} ne '0' );
+$msg .= "crit " if ( $opt{crit} eq '' && $opt{crit} ne '0' );
+print "Missing args: $msg\n" if $msg;
+usage($msg) if $msg;
+
+my $show = "";
+if ( $opt{showThresh} )
+	{
+	my $tmp ="";
+	$tmp = $opt{warn} ? $opt{warn} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= " Warning: $tmp";
+	$show .= ", Warning (High): $opt{hiWarn}" if $opt{hiWarn};
+	$tmp = $opt{crit} ? $opt{crit} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= ", Critical: $tmp";
+	$show .= ", Critical (High): $opt{hiCrit}" if $opt{hiCrit};
+	$show = "- Thresholds -" . $show;
+	}
+
+
+
+#################################################################
+
+if ( -x $opt{cmd} )
+	{
+	$opt{cmd} = $opt{cmd} . " $opt{endianness} $opt{jlog}";
+	print $opt{cmd} if $opt{debug};
+	
+	my $rs = `$opt{cmd}`;
+	if ( ! $rs )
+		{
+		print "$rtn{0} - jlog looks clean!\n";
+		}
+	else
+		{
+		print "$rtn{1} - Found errors in jlog.  See detailed view.\n";
+		print "$rs \n";
+		}
+	}
+else
+	{
+	print "$rtn{3} - jlog_sanity_check.pl tool not found at $opt{cmd}\n";
+	exit(3);
+	}
+#################################################################
+
+
+
+usage() if $opt{help};
+
+sub usage
+	{
+	print "This is the Nagios NRPE Plugin Template.  Put your description here.\n";
+	print "usage: $0 \n";
+	print "\n";
+
+        print <<EOF;
+                "help",
+                "warn|loWarn:s",          # The low threshold at which to start wanring
+                "hiWarn:s",               # The high threshold at which to start wanring
+                "crit|loCrit:s",          # The low threshold at which to start criticals
+                "hiCrit:s",               # The high threshold at which to start criticals
+                "showThresh",             # Toggle output of Threshold setting
+                "test",                   # don't execute any commands (not always implemented)
+                "debug"                   # verbose
+
+EOF
+	exit;
+	}
+
+
+
+
+

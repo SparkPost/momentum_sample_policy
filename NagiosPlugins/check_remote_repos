@@ -1,0 +1,179 @@
+#!/opt/msys/3rdParty/bin/perl
+
+use lib '/opt/ecelerity/lib/perl/';
+
+use Getopt::Long;
+use Pod::Usage;
+use strict;  
+
+
+my %rtnc;  # Nagios return codes and strings
+$rtnc{'0'} = "OK";
+$rtnc{'1'} = "WARNING";
+$rtnc{'2'} = "CRITICAL";
+$rtnc{'3'} = "UNKNOWN";
+
+my %opt;
+$opt{port} = '/tmp/2025';
+$opt{cmd} = '/usr/bin/svn';
+$opt{tmp} = '/tmp';
+
+GetOptions( \%opt,
+			"help",
+			"user:s",			# svn username (not implemented, use keyfile)
+			"pass:s",			# svn passwd (not implemented, use keyfile)
+			"cmd:s",			# path to svn command
+			"local:s",			# the local repository to check (https://...)
+			"remote:s",			# the remote repository to check (file:///...)
+			"tmp:s",			# location of the tmp dir to use
+			"host:s",			# the name of the remote host
+			"noSSL",			# We use SSL by default. set this if you don't want it
+			"keyfile:s",			# the SSH key file to use to connect to remote host
+			"checkout",			# include a checkout version in the tarball
+			"dontCleanUp",			# don't clean up tmp files
+			"warn|loWarn:s",		# The low threshold at which to start wanring
+			"hiWarn:s",			# The high threshold at which to start wanring
+			"crit|loCrit:s",		# The low threshold at which to start criticals
+			"hiCrit:s",			# The high threshold at which to start criticals
+			"showThresh",			# Toggle output of Threshold setting
+			"test",				# don't execute any commands.  dry run
+			"debug"				# be verbose
+		  	);
+
+# Dump args for debugging
+if ( $opt{debug} )
+  {
+  print "Got Args:\n";
+  foreach my $key ( sort(keys(%opt)) )
+	{
+	print "   $key:$opt{$key}\n";
+	}
+  }
+
+# check opts
+my $msg = '';
+usage() if $opt{help};
+$msg .= "cmd, " if !$opt{cmd};
+$msg .= "local, " if ( $opt{local} eq ''  );
+$msg .= "remote, " if ( $opt{remote} eq ''  );
+$msg .= "host, " if ( $opt{host} eq ''  );
+$msg .= "keyfile, " if ( $opt{keyfile} eq ''  );
+$msg .= "warn, " if ( $opt{warn} eq '' && $opt{warn} ne '0' );
+$msg .= "crit, " if ( $opt{crit} eq '' && $opt{crit} ne '0' );
+$msg =~ s/, $//;
+print "Missing args: $msg\n" if $msg;
+usage($msg) if $msg;
+
+#####################################################################
+
+my $rtns;
+my @lines;
+my %counts;
+my $show = "";
+my $ecode = "0";
+my $rtn = "";
+
+if ( $opt{showThresh} )
+	{
+	my $tmp ="";
+	$tmp = $opt{warn} ? $opt{warn} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= " Warning: $tmp";
+	$show .= ", Warning (High): $opt{hiWarn}" if $opt{hiWarn};
+	$tmp = $opt{crit} ? $opt{crit} : '*Disabled*';  # print the word 'disabled' instead of 0
+	$show .= ", Critical: $tmp";
+	$show .= ", Critical (High): $opt{hiCrit}" if $opt{hiCrit};
+	$show = "- Thresholds -" . $show;
+	}
+
+# do the remote stuff
+runThis("ssh -i $opt{keyfile} root\@$opt{host} 'mkdir -p $opt{tmp}/$opt{host}/remote/ ; $opt{cmd} --config-dir /home/nagios/.subversion --force export $opt{remote} $opt{tmp}/$opt{host}/remote/ ' ");
+#runThis("ssh -i $opt{keyfile} root\@$opt{host} '$opt{cmd} --config-dir /home/nagios/.subversion checkout $opt{remote} $opt{tmp}/$opt{host}/remote/checkout/ ' ") if $opt{checkout};
+runThis("ssh -i $opt{keyfile} root\@$opt{host} 'cd $opt{tmp}/$opt{host} && /bin/tar -vzcf remote.tgz remote/ '");
+runThis("mkdir -p $opt{tmp}/$opt{host}");
+runThis("scp -i $opt{keyfile} root\@$opt{host}:$opt{tmp}/$opt{host}/remote.tgz $opt{tmp}/$opt{host}/ ");
+runThis("ssh -i $opt{keyfile} root\@$opt{host} 'rm -vRf $opt{tmp}/$opt{host} '");
+
+
+# the local stuff
+runThis("cd $opt{tmp}/$opt{host} && tar -vzxf remote.tgz");
+runThis("/usr/bin/svn --config-dir /home/nagios/.subversion --force export $opt{local} $opt{tmp}/$opt{host}/local/");
+my @diffs = `diff --brief -r $opt{tmp}/$opt{host}/local $opt{tmp}/$opt{host}/remote 2>&1`;
+
+
+if ( $#diffs ne -1 )
+	{
+	my $moreInfo;
+	if ( $opt{checkout} )
+		{
+		runThis("/usr/bin/svn --config-dir /home/nagios/.subversion checkout $opt{local} $opt{tmp}/$opt{host}/checkout/");
+		runThis("cp -vR $opt{tmp}/$opt{host}/remote/* $opt{tmp}/$opt{host}/checkout/");
+		my $myHost = `hostname`;
+		chomp($myHost);
+		$moreInfo = "Committable checkout on host: $myHost:$opt{tmp}/$opt{host}/checkout/\n";
+		}
+	my $cnt = $#diffs + 1;
+	print "WARNING - Remote repository is out of sync! $cnt diffs found.\n$moreInfo";
+	foreach my $ln (@diffs)
+		{
+		$ln =~ s/$opt{tmp}\/$opt{host}\///g;
+		print $ln;
+		}
+	exit(1);
+	}
+
+print "OK - Remote repository is nSync.\n";
+runThis("rm -Rvf $opt{tmp}/$opt{host}") if ! $opt{dontCleanUp};
+exit(0);
+
+
+sub runThis
+	{
+	my ( $cmd ) = @_;
+	$cmd .= " 2>&1";
+	print $cmd, "\n" if $opt{debug};
+	my $rts = `$cmd` if ! $opt{test};
+	print $rts if $opt{debug};
+	checkForError($?, $rts);
+	}
+
+sub checkForError
+	{
+	my ( $rtc, $rts ) = @_;
+	return(0) if !$rtc;
+	print "Error: $rts\n";
+	exit(3);
+	}
+
+sub usage
+  {
+  my ( $msg ) = @_;
+
+  print "\nThis is the Nagios NRPE Plugin Template.  Put your stuff here.\n";
+  print "usage: $0 \n";
+  print "\n";
+        print <<EOF;
+                        "help",
+                        "user:s",                       # svn username (not implemented, use keyfile)
+                        "pass:s",                       # svn passwd (not implemented, use keyfile)
+                        "cmd:s",                        # path to svn command
+                        "local:s",                      # the local repository to check (https://...)
+                        "remote:s",                     # the remote repository to check (file:///...)
+                        "tmp:s",                        # location of the tmp dir to use
+                        "host:s",                       # the name of the remote host
+                        "noSSL",                        # We use SSL by default. set this if you don't want it
+                        "keyfile:s",                    # the SSH key file to use to connect to remote host
+                        "checkout",                     # include a checkout version in the tarball
+                        "dontCleanUp",                  # don't clean up tmp files
+                        "warn|loWarn:s",                # The low threshold at which to start wanring
+                        "hiWarn:s",                     # The high threshold at which to start wanring
+                        "crit|loCrit:s",                # The low threshold at which to start criticals
+                        "hiCrit:s",                     # The high threshold at which to start criticals
+                        "showThresh",                   # Toggle output of Threshold setting
+                        "test",                         # don't execute any commands.  dry run
+                        "debug"                         # be verbose
+
+EOF
+  exit;
+  }
+
+
