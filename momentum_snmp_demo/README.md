@@ -1,10 +1,13 @@
 # Momentum SNMP Domain Query Demo
 
-This is a basic example for how to query specific domain stats.
+This is a basic example for how to query specific [SNMP domain stats](https://support.messagesystems.com/docs/web-ref/conf.ref.snmp.php).
+
+**Warning:** _This is will block Momentums scheduler thread and may cause performance impacts._
+
 
 ## Usage
 
-`./output/darwin/queryMomentum --domain gmail.com --host 127.0.0.1 --port 8162`
+`https://github.com/SparkPost/momentum_sample_policy/tree/master/momentum_snmp_demo`
 
 
 ## Example Output
