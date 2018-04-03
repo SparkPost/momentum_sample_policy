@@ -5,7 +5,7 @@ Momentum can be configured to relay messages through a remote SMTP server. This 
 
 ## Work Around missing API definition
 
-Momentum versions < 4.3.2.?13? need to do the following to enable outbound smtp
+Momentum versions < 4.2.?13? need to do the following to enable outbound smtp
 
 `vi /opt/msys/ecelerity/libexec/validate/outbound_smtp_auth.ecm`
 
